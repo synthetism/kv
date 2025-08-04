@@ -27,5 +27,27 @@ export type { KeyValueConfig, KeyValueProps } from './kv.unit.js';
 export type { IKeyValueAdapter } from './interfaces.js';
 
 // Adapters
-export { MemoryAdapter } from './adapters/memory.adapter.js';
-export type { MemoryAdapterConfig } from './adapters/memory.adapter.js';
+export { MemoryAdapter } from './adapters/memory-basic.adapter.js';
+export type { MemoryAdapterConfig } from './adapters/memory-basic.adapter.js';
+
+// Events and monitoring
+export { 
+  KVEventEmitter, 
+  createEventSubscription 
+} from './events.js';
+export type { 
+  KVEvent, 
+  KVStats, 
+  KVError, 
+  KVEventObserver 
+} from './events.js';
+
+// Serialization
+export { 
+  defaultSerialize, 
+  defaultDeserialize, 
+  createSerializationAdapter,
+  jsonSerializer,
+  identitySerializer
+} from './serialization.js';
+export type { SerializationAdapter } from './serialization.js';

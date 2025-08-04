@@ -1,5 +1,6 @@
 import { Unit, type UnitProps, type TeachingContract, createUnitSchema } from '@synet/unit';
 import type { IKeyValueAdapter, KeyValueConfig } from './interfaces.js';
+import { KVEventEmitter, createEventSubscription, type KVEvent, type KVError, type KVStats } from './events.js';
 
 // Re-export config type for convenience
 export type { KeyValueConfig } from './interfaces.js';
@@ -12,6 +13,7 @@ export interface KeyValueProps extends UnitProps {
   description: string;
   defaultTTL?: number;
   namespace: string;
+  throwOnErrors?: boolean;
 }
 
 /**
@@ -26,6 +28,8 @@ export interface KeyValueProps extends UnitProps {
  * - Teaching storage capabilities to other units
  * - Learning storage patterns from other units
  * - Runtime validation and error guidance
+ * - Event emission for monitoring and debugging
+ * - Error handling with optional throwing
  * 
  * Example:
  * ```typescript
@@ -42,8 +46,17 @@ export interface KeyValueProps extends UnitProps {
  * ```
  */
 export class KeyValue extends Unit<KeyValueProps> {
+  private events = new KVEventEmitter();
+  
   protected constructor(props: KeyValueProps) {
     super(props);
+    
+    // Forward adapter events if adapter supports them
+    if ('onEvent' in this.props.adapter && typeof this.props.adapter.onEvent === 'function') {
+      this.props.adapter.onEvent('error', (event: KVEvent) => {
+        this.events.emit(event);
+      });
+    }
   }
   
   static create(config: KeyValueConfig): KeyValue {
@@ -60,6 +73,7 @@ export class KeyValue extends Unit<KeyValueProps> {
       description: config.description || `KeyValue Unit with ${config.adapter.name} adapter`,
       defaultTTL: config.defaultTTL,
       namespace: config.namespace || '',
+      throwOnErrors: config.throwOnErrors ?? false,
     };
     
     return new KeyValue(props);
@@ -243,10 +257,78 @@ export class KeyValue extends Unit<KeyValueProps> {
   }
 
   /**
+   * Get adapter statistics if available
+   */
+  getStats(): KVStats | null {
+    if ('getStats' in this.props.adapter && typeof this.props.adapter.getStats === 'function') {
+      return this.props.adapter.getStats() as KVStats;
+    }
+    return null;
+  }
+
+  /**
+   * Subscribe to KV events
+   */
+  onEvent(eventType: string, handler: (event: KVEvent) => void): () => void {
+    return createEventSubscription(this.events, eventType, handler);
+  }
+
+  /**
+   * Subscribe to error events
+   */
+  onError(handler: (error: KVError) => void): () => void {
+    return this.onEvent('error', (event) => {
+      if (event.error) {
+        handler({
+          operation: event.type,
+          key: event.key,
+          error: event.error,
+          timestamp: event.timestamp,
+        });
+      }
+    });
+  }
+
+  /**
+   * Manual cleanup if adapter supports it
+   */
+  cleanup(): number {
+    if ('cleanup' in this.props.adapter && typeof this.props.adapter.cleanup === 'function') {
+      return this.props.adapter.cleanup() as number;
+    }
+    return 0;
+  }
+
+  /**
    * Build full key with namespace
    */
   private buildKey(key: string): string {
     return this.props.namespace ? `${this.props.namespace}:${key}` : key;
+  }
+
+  /**
+   * Handle errors according to configuration
+   */
+  private handleError(operation: string, key: string | undefined, error: Error): void {
+    const kvError: KVError = {
+      operation,
+      key,
+      error,
+      timestamp: Date.now(),
+    };
+    
+    // Emit error event
+    this.events.emit({
+      type: 'error',
+      key,
+      error,
+      timestamp: kvError.timestamp,
+    });
+    
+    // Throw if configured to do so
+    if (this.props.throwOnErrors) {
+      throw error;
+    }
   }
 
   /**

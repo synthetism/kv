@@ -36,6 +36,8 @@ export interface KeyValueConfig {
   defaultTTL?: number;
   /** Key namespace */
   namespace?: string;
+  /** Whether to throw errors or just emit them */
+  throwOnErrors?: boolean;
 }
 
 /**
