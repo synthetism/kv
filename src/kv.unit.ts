@@ -268,16 +268,50 @@ export class KeyValue extends Unit<KeyValueProps> {
 
   /**
    * Subscribe to KV events
+   * 
+   * Available events:
+   * - 'set': When a key is set
+   * - 'get': When a key is retrieved  
+   * - 'delete': When a key is deleted
+   * - 'clear': When storage is cleared
+   * - 'error': When an error occurs
+   * - 'expired': When a key expires (TTL)
+   * 
+   * @param eventType - Type of event to listen for
+   * @param handler - Function to call when event occurs
+   * @returns Unsubscribe function
    */
-  onEvent(eventType: string, handler: (event: KVEvent) => void): () => void {
-    return createEventSubscription(this.events, eventType, handler);
+  on(eventType: string, handler: (event: KVEvent) => void): () => void {
+    this.events.on(eventType, handler);
+    
+    // Return unsubscribe function
+    return () => {
+      this.events.off(eventType, handler);
+    };
   }
 
   /**
-   * Subscribe to error events
+   * Unsubscribe from KV events
+   * 
+   * @param eventType - Type of event to stop listening for
+   * @param handler - Specific handler to remove (optional - removes all if not provided)
+   */
+  off(eventType: string, handler?: (event: KVEvent) => void): void {
+    this.events.off(eventType, handler);
+  }
+
+  /**
+   * Subscribe to events using legacy observer pattern
+   */
+  onEvent(eventType: string, handler: (event: KVEvent) => void): () => void {
+    return this.on(eventType, handler);
+  }
+
+  /**
+   * Subscribe to error events specifically (convenience method)
    */
   onError(handler: (error: KVError) => void): () => void {
-    return this.onEvent('error', (event) => {
+    return this.on('error', (event) => {
       if (event.error) {
         handler({
           operation: event.type,
@@ -374,6 +408,19 @@ export class KeyValue extends Unit<KeyValueProps> {
         },
         getAdapter: (...args: unknown[]) => {
           return this.getAdapter();
+        },
+        // Event capabilities
+        on: (...args: unknown[]) => {
+          const [eventType, handler] = args as [string, (event: KVEvent) => void];
+          return this.on(eventType, handler);
+        },
+        off: (...args: unknown[]) => {
+          const [eventType, handler] = args as [string, ((event: KVEvent) => void) | undefined];
+          return this.off(eventType, handler);
+        },
+        onError: (...args: unknown[]) => {
+          const [handler] = args as [(error: KVError) => void];
+          return this.onError(handler);
         },
       }
     };

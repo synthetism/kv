@@ -41,20 +41,6 @@ export interface KeyValueConfig {
 }
 
 /**
- * KeyValue Unit Configuration (following Queue pattern)
- */
-export interface KeyValueConfig {
-  /** Key-value adapter instance */
-  adapter: IKeyValueAdapter;
-  /** Unit description */
-  description?: string;
-  /** Default TTL for keys */
-  defaultTTL?: number;
-  /** Key namespace */
-  namespace?: string;
-}
-
-/**
  * KV Event types for conscious event-driven behavior
  */
 export interface KVEvent {

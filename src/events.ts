@@ -43,77 +43,110 @@ export interface KVEventObserver {
 
 /**
  * Simple event emitter for KV operations
- * Based on observer pattern from @synet/patterns
+ * Based on observer pattern but with direct on/off interface like Node.js EventEmitter
  */
 export class KVEventEmitter {
-  private observers: Map<string, KVEventObserver[]> = new Map();
+  private handlers = new Map<string, Array<(event: KVEvent) => void>>();
 
   /**
    * Subscribe to events of a specific type
    */
-  subscribe(eventType: string, observer: KVEventObserver): void {
-    const observers = this.observers.get(eventType) || [];
-    if (!observers.includes(observer)) {
-      observers.push(observer);
-      this.observers.set(eventType, observers);
+  on(eventType: string, handler: (event: KVEvent) => void): void {
+    const existing = this.handlers.get(eventType) || [];
+    existing.push(handler);
+    this.handlers.set(eventType, existing);
+  }
+
+  /**
+   * Unsubscribe from events
+   */
+  off(eventType: string, handler?: (event: KVEvent) => void): void {
+    if (!handler) {
+      // Remove all handlers for this event type
+      this.handlers.delete(eventType);
+      return;
+    }
+
+    const existing = this.handlers.get(eventType);
+    if (existing) {
+      const index = existing.indexOf(handler);
+      if (index !== -1) {
+        existing.splice(index, 1);
+        if (existing.length === 0) {
+          this.handlers.delete(eventType);
+        } else {
+          this.handlers.set(eventType, existing);
+        }
+      }
     }
   }
 
   /**
-   * Unsubscribe from events of a specific type
+   * Subscribe to events using observer pattern (legacy compatibility)
+   */
+  subscribe(eventType: string, observer: KVEventObserver): void {
+    this.on(eventType, observer.update);
+  }
+
+  /**
+   * Unsubscribe using observer pattern (legacy compatibility)
    */
   unsubscribe(eventType: string, observer: KVEventObserver): void {
-    const observers = this.observers.get(eventType);
-    if (!observers) return;
+    this.off(eventType, observer.update);
+  }
 
-    const index = observers.indexOf(observer);
-    if (index !== -1) {
-      observers.splice(index, 1);
-      if (observers.length === 0) {
-        this.observers.delete(eventType);
-      } else {
-        this.observers.set(eventType, observers);
+  /**
+   * Emit an event to all subscribed handlers
+   */
+  emit(event: KVEvent): void {
+    const handlers = this.handlers.get(event.type) || [];
+    for (const handler of handlers) {
+      try {
+        handler(event);
+      } catch (error) {
+        // Don't let handler errors break the emitter
+        console.error('[KVEventEmitter] Handler error:', error);
       }
     }
   }
 
   /**
-   * Emit an event to all subscribed observers
+   * Remove all listeners for event type
    */
-  emit(event: KVEvent): void {
-    const observers = this.observers.get(event.type) || [];
-    for (const observer of observers) {
-      try {
-        observer.update(event);
-      } catch (error) {
-        // Don't let observer errors break the emitter
-        console.error('KVEventEmitter observer error:', error);
-      }
+  removeAllListeners(eventType?: string): void {
+    if (eventType) {
+      this.handlers.delete(eventType);
+    } else {
+      this.handlers.clear();
     }
+  }
+
+  /**
+   * Get number of listeners for event type
+   */
+  listenerCount(eventType: string): number {
+    return this.handlers.get(eventType)?.length || 0;
   }
 
   /**
    * Check if there are any subscribers for a specific event type
    */
   hasObservers(eventType: string): boolean {
-    return (
-      this.observers.has(eventType) &&
-      (this.observers.get(eventType)?.length ?? 0) > 0
-    );
+    return this.listenerCount(eventType) > 0;
   }
 
   /**
    * Get all active event types
    */
   getEventTypes(): string[] {
-    return Array.from(this.observers.keys());
+    return Array.from(this.handlers.keys());
   }
 
   /**
    * Clear all observers
    */
   clear(): void {
-    this.observers.clear();
+    this.handlers.clear();
   }
 }
 
@@ -125,7 +158,6 @@ export const createEventSubscription = (
   eventType: string,
   handler: (event: KVEvent) => void
 ): (() => void) => {
-  const observer: KVEventObserver = { update: handler };
-  emitter.subscribe(eventType, observer);
-  return () => emitter.unsubscribe(eventType, observer);
+  emitter.on(eventType, handler);
+  return () => emitter.off(eventType, handler);
 };
