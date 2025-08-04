@@ -11,11 +11,10 @@ import { KeyValue, MemoryAdapter } from '../src/index.js';
 async function main() {
   console.log('🎭 SYNET KeyValue Event System Demo\n');
 
-  // Create KeyValue unit with enhanced memory adapter
+  // Create KeyValue unit with final memory adapter
   const adapter = new MemoryAdapter({
     maxKeys: 1000,
     defaultTTL: 0,
-    emitEvents: true,
     cleanupInterval: 0, // Manual cleanup for demo
   });
 
