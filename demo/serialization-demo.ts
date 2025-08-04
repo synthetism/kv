@@ -221,4 +221,12 @@ async function main() {
 // Import the interface for the demo
 import type { IKeyValueAdapter } from '../src/interfaces.js';
 
-main().catch(console.error);
+main()
+  .then(() => {
+    console.log('\n🏁 Serialization demo completed');
+    process.exit(0);
+  })
+  .catch(error => {
+    console.error('💥 Demo error:', error);
+    process.exit(1);
+  });

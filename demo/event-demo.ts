@@ -178,4 +178,12 @@ async function main() {
   console.log('• Error events provide debugging capabilities');
 }
 
-main().catch(console.error);
+main()
+  .then(() => {
+    console.log('\n🏁 Event demo completed');
+    process.exit(0);
+  })
+  .catch(error => {
+    console.error('💥 Demo error:', error);
+    process.exit(1);
+  });

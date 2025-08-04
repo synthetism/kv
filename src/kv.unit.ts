@@ -1,6 +1,6 @@
 import { Unit, type UnitProps, type TeachingContract, createUnitSchema } from '@synet/unit';
 import type { IKeyValueAdapter, KeyValueConfig } from './interfaces.js';
-import { KVEventEmitter, createEventSubscription, type KVEvent, type KVError, type KVStats } from './events.js';
+import { KVEventEmitter,  type KVEvent, type KVError, type KVStats } from './events.js';
 
 // Re-export config type for convenience
 export type { KeyValueConfig } from './interfaces.js';
@@ -50,13 +50,6 @@ export class KeyValue extends Unit<KeyValueProps> {
   
   protected constructor(props: KeyValueProps) {
     super(props);
-    
-    // Forward adapter events if adapter supports them
-    if ('onEvent' in this.props.adapter && typeof this.props.adapter.onEvent === 'function') {
-      this.props.adapter.onEvent('error', (event: KVEvent) => {
-        this.events.emit(event);
-      });
-    }
   }
   
   static create(config: KeyValueConfig): KeyValue {
@@ -91,8 +84,19 @@ export class KeyValue extends Unit<KeyValueProps> {
     const fullKey = this.buildKey(key);
     
     try {
-      return await this.props.adapter.get<T>(fullKey);
+      const value = await this.props.adapter.get<T>(fullKey);
+      
+      // Emit get event
+      this.events.emit({
+        type: 'get',
+        key: fullKey,
+        value,
+        timestamp: Date.now()
+      });
+      
+      return value;
     } catch (error) {
+      this.handleError('get', fullKey, error as Error);
       throw new Error(`[${this.dna.id}] Failed to get key: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -114,7 +118,17 @@ export class KeyValue extends Unit<KeyValueProps> {
     
     try {
       await this.props.adapter.set(fullKey, value, effectiveTTL);
+      
+      // Emit set event
+      this.events.emit({
+        type: 'set',
+        key: fullKey,
+        value,
+        ttl: effectiveTTL,
+        timestamp: Date.now()
+      });
     } catch (error) {
+      this.handleError('set', fullKey, error as Error);
       throw new Error(`[${this.dna.id}] Failed to set key: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -130,8 +144,18 @@ export class KeyValue extends Unit<KeyValueProps> {
     const fullKey = this.buildKey(key);
     
     try {
-      return await this.props.adapter.delete(fullKey);
+      const deleted = await this.props.adapter.delete(fullKey);
+      
+      // Emit delete event
+      this.events.emit({
+        type: 'delete',
+        key: fullKey,
+        timestamp: Date.now()
+      });
+      
+      return deleted;
     } catch (error) {
+      this.handleError('delete', fullKey, error as Error);
       throw new Error(`[${this.dna.id}] Failed to delete key: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -159,7 +183,14 @@ export class KeyValue extends Unit<KeyValueProps> {
   async clear(): Promise<void> {
     try {
       await this.props.adapter.clear();
+      
+      // Emit clear event
+      this.events.emit({
+        type: 'clear',
+        timestamp: Date.now()
+      });
     } catch (error) {
+      this.handleError('clear', undefined, error as Error);
       throw new Error(`[${this.dna.id}] Failed to clear storage: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MemoryAdapter } from '../src/adapters/memory-basic.adapter.js';
-import { defaultSerialize, defaultDeserialize } from '../src/serialization.js';
-import type { KVEvent, KVError } from '../src/events.js';
+import { MemoryAdapter } from '../src/adapters/memory-final.adapter.js';
 
 describe('Enhanced Memory Adapter', () => {
   let adapter: MemoryAdapter;
@@ -10,7 +8,6 @@ describe('Enhanced Memory Adapter', () => {
     adapter = new MemoryAdapter({
       maxKeys: 100,
       defaultTTL: 0,
-      emitEvents: true,
       cleanupInterval: 0, // Disable auto-cleanup for tests
     });
   });
@@ -184,83 +181,6 @@ describe('Enhanced Memory Adapter', () => {
     });
   });
 
-  describe('Events', () => {
-    it('should emit set events', async () => {
-      const events: KVEvent[] = [];
-      adapter.onEvent('set', (event) => events.push(event));
-
-      await adapter.set('test', 'value');
-      
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
-        type: 'set',
-        key: 'test',
-        value: 'value',
-      });
-    });
-
-    it('should emit get events', async () => {
-      const events: KVEvent[] = [];
-      adapter.onEvent('get', (event) => events.push(event));
-
-      await adapter.set('test', 'value');
-      await adapter.get('test');
-      await adapter.get('nonexistent');
-      
-      expect(events).toHaveLength(2);
-      expect(events[0]).toMatchObject({
-        type: 'get',
-        key: 'test',
-        value: 'value',
-      });
-      expect(events[1]).toMatchObject({
-        type: 'get',
-        key: 'nonexistent',
-      });
-    });
-
-    it('should emit expired events', async () => {
-      const events: KVEvent[] = [];
-      adapter.onEvent('expired', (event) => events.push(event));
-
-      await adapter.set('temp', 'value', 50);
-      
-      // Wait for expiration
-      await new Promise(resolve => setTimeout(resolve, 100));
-      await adapter.get('temp'); // Trigger expiration check
-      
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
-        type: 'expired',
-        key: 'temp',
-      });
-    });
-
-    it('should emit error events', async () => {
-      const errors: KVError[] = [];
-      
-      // Create a small adapter that will trigger max keys error
-      const smallAdapter = new MemoryAdapter({ maxKeys: 2, cleanupInterval: 0 });
-      smallAdapter.onError((error) => errors.push(error));
-
-      await smallAdapter.set('key1', 'value1');
-      await smallAdapter.set('key2', 'value2');
-      
-      try {
-        await smallAdapter.set('key3', 'value3');
-      } catch {
-        // Expected to throw
-      }
-      
-      expect(errors).toHaveLength(1);
-      expect(errors[0]).toMatchObject({
-        operation: 'error', // From event type
-        key: 'key3',
-      });
-      
-      smallAdapter.destroy();
-    });
-  });
 
   describe('Statistics', () => {
     it('should track operation statistics', async () => {
@@ -368,7 +288,7 @@ describe('Enhanced Memory Adapter', () => {
       
       await smallAdapter.set('key1', 'value1');
       
-      await expect(smallAdapter.set('key2', 'value2')).rejects.toThrow('Maximum keys limit reached');
+      await expect(smallAdapter.set('key2', 'value2')).rejects.toThrow('Maximum keys limit (1) reached');
       
       smallAdapter.destroy();
     });
@@ -389,6 +309,148 @@ describe('Enhanced Memory Adapter', () => {
       
       // After destroy, store should be empty
       expect(timerAdapter.keys()).toHaveLength(0);
+    });
+  });
+
+  describe('Advanced Serialization Tests', () => {
+    it('should handle complex nested objects', async () => {
+      const complexObject = {
+        user: { name: 'Alice', metadata: { roles: ['admin', 'user'], active: true } },
+        config: { theme: 'dark', version: 1.2 },
+        data: [1, 2, { nested: true }]
+      };
+
+      await adapter.set('complex', complexObject);
+      const result = await adapter.get('complex');
+      
+      expect(result).toEqual(complexObject);
+    });
+
+    it('should handle string edge cases', async () => {
+      // Test strings that might conflict with our serialization markers
+      await adapter.set('edge1', ':base64:not-actually-base64');
+      await adapter.set('edge2', ':prefix:value');
+      await adapter.set('edge3', '::double-colon');
+      
+      expect(await adapter.get('edge1')).toBe(':base64:not-actually-base64');
+      expect(await adapter.get('edge2')).toBe(':prefix:value');
+      expect(await adapter.get('edge3')).toBe('::double-colon');
+    });
+
+    it('should handle Buffer edge cases', async () => {
+      // Empty buffer
+      const emptyBuffer = Buffer.alloc(0);
+      await adapter.set('empty-buffer', emptyBuffer);
+      const result1 = await adapter.get('empty-buffer');
+      expect(Buffer.isBuffer(result1)).toBe(true);
+      expect((result1 as Buffer).length).toBe(0);
+
+      // Binary data buffer
+      const binaryBuffer = Buffer.from([0x00, 0x01, 0xFF, 0xFE]);
+      await adapter.set('binary-buffer', binaryBuffer);
+      const result2 = await adapter.get('binary-buffer');
+      expect(Buffer.isBuffer(result2)).toBe(true);
+      expect(Array.from(result2 as Buffer)).toEqual([0x00, 0x01, 0xFF, 0xFE]);
+    });
+  });
+
+  describe('Memory and Performance Tests', () => {
+    it('should handle memory pressure gracefully', async () => {
+      const smallAdapter = new MemoryAdapter({ maxKeys: 5, cleanupInterval: 0 });
+      
+      // Fill to capacity
+      for (let i = 0; i < 5; i++) {
+        await smallAdapter.set(`key${i}`, `value${i}`);
+      }
+      
+      const stats = smallAdapter.getStats();
+      expect(stats.keys).toBe(5);
+      expect(stats.sets).toBe(5);
+      
+      // Should throw on overflow
+      await expect(smallAdapter.set('overflow', 'value')).rejects.toThrow();
+      
+      smallAdapter.destroy();
+    });
+
+    it('should track memory accurately', async () => {
+      const initialStats = adapter.getStats();
+      const initialMemory = initialStats.memory;
+      
+      // Add progressively larger values
+      await adapter.set('small', 'x');
+      await adapter.set('medium', 'x'.repeat(100));
+      await adapter.set('large', 'x'.repeat(1000));
+      
+      const finalStats = adapter.getStats();
+      expect(finalStats.memory).toBeGreaterThan(initialMemory);
+      expect(finalStats.keys).toBe(3);
+      
+      // Memory should decrease after deletion
+      await adapter.delete('large');
+      const afterDeleteStats = adapter.getStats();
+      expect(afterDeleteStats.memory).toBeLessThan(finalStats.memory);
+    });
+  });
+
+  describe('TTL Edge Cases', () => {
+    it('should handle very short TTL', async () => {
+      await adapter.set('very-short', 'value', 1); // 1ms TTL
+      
+      // Should immediately expire
+      await new Promise(resolve => setTimeout(resolve, 5));
+      expect(await adapter.get('very-short')).toBeNull();
+    });
+
+    it('should handle TTL of 0 (no expiration)', async () => {
+      await adapter.set('no-expiry', 'value', 0);
+      
+      // Should not expire
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(await adapter.get('no-expiry')).toBe('value');
+    });
+
+    it('should handle mixed TTL and non-TTL keys', async () => {
+      await adapter.set('permanent', 'value');
+      await adapter.set('temporary', 'value', 50);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      expect(await adapter.get('permanent')).toBe('value');
+      expect(await adapter.get('temporary')).toBeNull();
+    });
+  });
+
+  describe('Error Conditions', () => {
+    it('should handle serialization errors gracefully', async () => {
+      // Create adapter with faulty serializer
+      const faultyAdapter = new MemoryAdapter({
+        serialization: {
+          serialize: () => { throw new Error('Serialization failed'); },
+          deserialize: (data) => JSON.parse(data)
+        },
+        cleanupInterval: 0
+      });
+
+      await expect(faultyAdapter.set('test', 'value')).rejects.toThrow('Serialization failed');
+      
+      faultyAdapter.destroy();
+    });
+
+    it('should handle deserialization errors gracefully', async () => {
+      // Create adapter with faulty deserializer
+      const faultyAdapter = new MemoryAdapter({
+        serialization: {
+          serialize: (value) => JSON.stringify(value),
+          deserialize: () => { throw new Error('Deserialization failed'); }
+        },
+        cleanupInterval: 0
+      });
+
+      await faultyAdapter.set('test', 'value'); // This should work
+      await expect(faultyAdapter.get('test')).rejects.toThrow('Deserialization failed');
+      
+      faultyAdapter.destroy();
     });
   });
 });

@@ -170,7 +170,7 @@ describe('KeyValue Unit', () => {
     });
 
     it('should validate value parameters', async () => {
-      // @ts-expect-error - testing error case
+    
       await expect(kv.set('key', undefined)).rejects.toThrow('Value cannot be undefined');
     });
 

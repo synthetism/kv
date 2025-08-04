@@ -106,7 +106,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
     // Check max keys limit (only for new keys)
     if (!this.store.has(key) && this.store.size >= this.options.maxKeys) {
-      throw new Error(`[MemoryAdapter] Maximum keys limit (${this.options.maxKeys}) reached`);
+      throw new Error(`Maximum keys limit (${this.options.maxKeys}) reached`);
     }
     
     // Calculate expiration
@@ -186,8 +186,11 @@ export class MemoryAdapter implements IKeyValueAdapter {
 
   /**
    * Get all keys (for debugging/monitoring)
+   * Note: This triggers cleanup of expired keys
    */
   keys(): string[] {
+    // Clean up expired keys first
+    this.cleanup();
     return Array.from(this.store.keys());
   }
 
