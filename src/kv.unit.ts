@@ -11,6 +11,7 @@ import {
   type KVError,
   type KVStats,
 } from "./events.js";
+import { StateAsync, type StorageBinding } from "@synet/state";
 
 /**
  * KeyValue Unit Configuration (following Queue pattern)
@@ -424,6 +425,44 @@ export class KeyValue extends Unit<KeyValueProps> {
   }
 
   /**
+   * Producer Pattern: Create a StateAsync unit backed by this storage
+   * 
+   * This is the KeyValue → StateAsync producer pattern.
+   * KeyValue knows how to create storage bindings for State units.
+   * 
+   * @param config Configuration for the State unit
+   * @returns StateAsync unit with this KeyValue as storage backend
+   */
+  createState(config: { unitId: string; initialState?: Record<string, unknown>; emitEvents?: boolean } = { unitId: 'kv-state' }): StateAsync {
+    // Create storage binding from this KeyValue instance
+    const storageBinding: StorageBinding = {
+      get: async <T>(key: string): Promise<T | null> => {
+        return this.get<T>(key);
+      },
+      set: async <T>(key: string, value: T, ttl?: number): Promise<void> => {
+        return this.set(key, value, ttl);
+      },
+      delete: async (key: string): Promise<boolean> => {
+        return this.delete(key);
+      },
+      exists: async (key: string): Promise<boolean> => {
+        return this.exists(key);
+      },
+      clear: async (): Promise<void> => {
+        return this.clear();
+      }
+    };
+
+    // Create StateAsync with this KeyValue as storage backend
+    return StateAsync.create({
+      unitId: config.unitId,
+      initialState: config.initialState || {},
+      emitEvents: config.emitEvents ?? false,
+      storage: storageBinding
+    });
+  }
+
+  /**
    * Build full key with namespace
    */
   private buildKey(key: string): string {
@@ -523,6 +562,115 @@ export class KeyValue extends Unit<KeyValueProps> {
           return this.onError(handler);
         },
       },
+      schema: {
+        get: {
+          name: 'get',
+          description: 'Get value by key from storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to retrieve' }
+            },
+            required: ['key']
+          }
+        },
+        set: {
+          name: 'set',
+          description: 'Set key-value pair with optional TTL',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to store' },
+              value: { type: 'object', description: 'Value to store (any type)' },
+              ttl: { type: 'number', description: 'Time to live in milliseconds (optional)' }
+            },
+            required: ['key', 'value']
+          }
+        },
+        delete: {
+          name: 'delete',
+          description: 'Delete key from storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to delete' }
+            },
+            required: ['key']
+          }
+        },
+        exists: {
+          name: 'exists',
+          description: 'Check if key exists in storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to check' }
+            },
+            required: ['key']
+          }
+        },
+        clear: {
+          name: 'clear',
+          description: 'Clear all keys from storage',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        },
+        mget: {
+          name: 'mget',
+          description: 'Get multiple values by keys',
+          parameters: {
+            type: 'object',
+            properties: {
+              keys: { 
+                type: 'array', 
+                description: 'Array of keys to retrieve' 
+              }
+            },
+            required: ['keys']
+          }
+        },
+        mset: {
+          name: 'mset',
+          description: 'Set multiple key-value pairs',
+          parameters: {
+            type: 'object',
+            properties: {
+              entries: { 
+                type: 'array', 
+                description: 'Array of [key, value] pairs' 
+              },
+              ttl: { type: 'number', description: 'Time to live in milliseconds (optional)' }
+            },
+            required: ['entries']
+          }
+        },
+        deleteMany: {
+          name: 'deleteMany',
+          description: 'Delete multiple keys from storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              keys: { 
+                type: 'array', 
+                description: 'Array of keys to delete' 
+              }
+            },
+            required: ['keys']
+          }
+        },
+        isHealthy: {
+          name: 'isHealthy',
+          description: 'Check if storage is healthy and connected',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }
+      }
     };
   }
 
