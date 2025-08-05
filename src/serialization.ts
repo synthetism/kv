@@ -22,7 +22,7 @@ export const defaultSerialize = (value: unknown): string => {
  * Enhanced deserialization from keyv analysis
  * Restores JavaScript types from serialized strings
  */
-export const defaultDeserialize = <T>(data: string): T => 
+export const defaultDeserialize = <T>(data: string): T =>
   JSON.parse(data, (_, value) => {
     if (typeof value === "string") {
       if (value.startsWith(":base64:")) {
@@ -46,7 +46,7 @@ export interface SerializationAdapter {
  */
 export const createSerializationAdapter = (
   serialize: (value: unknown) => string = defaultSerialize,
-  deserialize: <T>(data: string) => T = defaultDeserialize
+  deserialize: <T>(data: string) => T = defaultDeserialize,
 ): SerializationAdapter => ({
   serialize,
   deserialize,

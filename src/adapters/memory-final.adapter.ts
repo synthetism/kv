@@ -1,5 +1,9 @@
-import type { IKeyValueAdapter } from '../interfaces.js';
-import { defaultSerialize, defaultDeserialize, type SerializationAdapter } from '../serialization.js';
+import type { IKeyValueAdapter } from "../interfaces.js";
+import {
+  defaultSerialize,
+  defaultDeserialize,
+  type SerializationAdapter,
+} from "../serialization.js";
 
 /**
  * Final memory adapter configuration
@@ -37,8 +41,8 @@ interface MemoryStats {
 }
 
 /**
- * Memory Adapter 
- * 
+ * Memory Adapter
+ *
  * Features:
  * - Smart serialization with Buffer support and type preservation
  * - TTL with automatic expiration and cleanup
@@ -48,9 +52,9 @@ interface MemoryStats {
  * - Performance optimized
  */
 export class MemoryAdapter implements IKeyValueAdapter {
-  readonly name = 'memory';
+  readonly name = "memory";
   readonly config: Record<string, unknown>;
-  
+
   private store = new Map<string, StorageEntry>();
   private cleanupTimer?: NodeJS.Timeout;
   private stats: MemoryStats = {
@@ -60,23 +64,26 @@ export class MemoryAdapter implements IKeyValueAdapter {
     deletes: 0,
     expired: 0,
     keys: 0,
-    memory: 0
+    memory: 0,
   };
   private options: Required<MemoryAdapterConfig>;
   private serialization: SerializationAdapter;
-  
+
   constructor(config: MemoryAdapterConfig = {}) {
     this.options = {
       defaultTTL: 0, // 0 means no default TTL
       maxKeys: 10000,
       cleanupInterval: 60000, // 1 minute
-      serialization: { serialize: defaultSerialize, deserialize: defaultDeserialize },
-      ...config
+      serialization: {
+        serialize: defaultSerialize,
+        deserialize: defaultDeserialize,
+      },
+      ...config,
     };
-    
+
     this.config = { ...this.options };
     this.serialization = this.options.serialization;
-    
+
     // Start automatic cleanup if interval is set
     if (this.options.cleanupInterval > 0) {
       this.startCleanup();
@@ -85,12 +92,12 @@ export class MemoryAdapter implements IKeyValueAdapter {
 
   async get<T>(key: string): Promise<T | null> {
     const entry = this.store.get(key);
-    
+
     if (!entry) {
       this.stats.misses++;
       return null;
     }
-    
+
     // Check TTL expiration
     if (entry.expires && Date.now() > entry.expires) {
       this.store.delete(key);
@@ -98,7 +105,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
       this.updateStats();
       return null;
     }
-    
+
     this.stats.hits++;
     return this.serialization.deserialize<T>(entry.value);
   }
@@ -108,15 +115,15 @@ export class MemoryAdapter implements IKeyValueAdapter {
     if (!this.store.has(key) && this.store.size >= this.options.maxKeys) {
       throw new Error(`Maximum keys limit (${this.options.maxKeys}) reached`);
     }
-    
+
     // Calculate expiration
     const effectiveTTL = ttl ?? (this.options.defaultTTL || undefined);
     const expires = effectiveTTL ? Date.now() + effectiveTTL : undefined;
-    
+
     // Serialize and store
     const serialized = this.serialization.serialize(value);
     this.store.set(key, { value: serialized, expires });
-    
+
     this.stats.sets++;
     this.updateStats();
   }
@@ -132,9 +139,9 @@ export class MemoryAdapter implements IKeyValueAdapter {
 
   async exists(key: string): Promise<boolean> {
     const entry = this.store.get(key);
-    
+
     if (!entry) return false;
-    
+
     // Check TTL expiration
     if (entry.expires && Date.now() > entry.expires) {
       this.store.delete(key);
@@ -142,7 +149,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
       this.updateStats();
       return false;
     }
-    
+
     return true;
   }
 
@@ -152,7 +159,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
   }
 
   async mget<T>(keys: string[]): Promise<(T | null)[]> {
-    return Promise.all(keys.map(key => this.get<T>(key)));
+    return Promise.all(keys.map((key) => this.get<T>(key)));
   }
 
   async mset<T>(entries: Array<[string, T]>, ttl?: number): Promise<void> {
@@ -175,7 +182,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
   }
 
   // ===== Enhanced Methods =====
-  
+
   /**
    * Get comprehensive statistics
    */
@@ -200,7 +207,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
   cleanup(): number {
     const now = Date.now();
     let cleaned = 0;
-    
+
     for (const [key, entry] of this.store.entries()) {
       if (entry.expires && now > entry.expires) {
         this.store.delete(key);
@@ -208,7 +215,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
         this.stats.expired++;
       }
     }
-    
+
     this.updateStats();
     return cleaned;
   }
@@ -259,7 +266,7 @@ export class MemoryAdapter implements IKeyValueAdapter {
       deletes: 0,
       expired: 0,
       keys: 0,
-      memory: 0
+      memory: 0,
     };
   }
 }

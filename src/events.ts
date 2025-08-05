@@ -2,7 +2,7 @@
  * KV operation events
  */
 export interface KVEvent {
-  type: 'set' | 'get' | 'delete' | 'clear' | 'expired' | 'error';
+  type: "set" | "get" | "delete" | "clear" | "expired" | "error";
   key?: string;
   value?: unknown;
   ttl?: number;
@@ -105,7 +105,7 @@ export class KVEventEmitter {
         handler(event);
       } catch (error) {
         // Don't let handler errors break the emitter
-        console.error('[KVEventEmitter] Handler error:', error);
+        console.error("[KVEventEmitter] Handler error:", error);
       }
     }
   }
@@ -156,7 +156,7 @@ export class KVEventEmitter {
 export const createEventSubscription = (
   emitter: KVEventEmitter,
   eventType: string,
-  handler: (event: KVEvent) => void
+  handler: (event: KVEvent) => void,
 ): (() => void) => {
   emitter.on(eventType, handler);
   return () => emitter.off(eventType, handler);

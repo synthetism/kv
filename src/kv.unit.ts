@@ -1,9 +1,35 @@
-import { Unit, type UnitProps, type TeachingContract, createUnitSchema } from '@synet/unit';
-import type { IKeyValueAdapter, KeyValueConfig } from './interfaces.js';
-import { KVEventEmitter,  type KVEvent, type KVError, type KVStats } from './events.js';
+import {
+  Unit,
+  type UnitProps,
+  type TeachingContract,
+  createUnitSchema,
+} from "@synet/unit";
+import type { IKeyValueAdapter } from "./interfaces.js";
+import {
+  KVEventEmitter,
+  type KVEvent,
+  type KVError,
+  type KVStats,
+} from "./events.js";
 
-// Re-export config type for convenience
-export type { KeyValueConfig } from './interfaces.js';
+/**
+ * KeyValue Unit Configuration (following Queue pattern)
+ */
+export interface KeyValueConfig {
+  /** Key-value adapter instance */
+  adapter: IKeyValueAdapter;
+  /** Unit description */
+  description?: string;
+  /** Default TTL for keys */
+  defaultTTL?: number;
+  /** Key namespace */
+  namespace?: string;
+  /** Whether to throw errors or just emit them */
+  throwOnErrors?: boolean;
+
+  /** Whether to emit events for operations */
+  emitEvents?: boolean;
+}
 
 /**
  * KeyValue Unit props
@@ -14,14 +40,15 @@ export interface KeyValueProps extends UnitProps {
   defaultTTL?: number;
   namespace: string;
   throwOnErrors?: boolean;
+  emitEvents?: boolean;
 }
 
 /**
  * KeyValue Unit - Consciousness-based key-value storage architecture
- * 
+ *
  * A Unit that wraps key-value adapters, providing consciousness-based
  * storage operations with teaching/learning capabilities.
- * 
+ *
  * Key Capabilities:
  * - Key-value storage operations (get, set, delete)
  * - Provider-agnostic through adapters
@@ -30,16 +57,16 @@ export interface KeyValueProps extends UnitProps {
  * - Runtime validation and error guidance
  * - Event emission for monitoring and debugging
  * - Error handling with optional throwing
- * 
+ *
  * Example:
  * ```typescript
  * const memory = new MemoryAdapter();
  * const kv = KeyValue.create({ adapter: memory });
- * 
+ *
  * // Store values
  * await kv.set('user:123', { name: 'Alice' });
  * const user = await kv.get('user:123');
- * 
+ *
  * // Teach capabilities
  * const contract = kv.teach();
  * otherUnit.learn([contract]);
@@ -47,57 +74,66 @@ export interface KeyValueProps extends UnitProps {
  */
 export class KeyValue extends Unit<KeyValueProps> {
   private events = new KVEventEmitter();
-  
+
   protected constructor(props: KeyValueProps) {
     super(props);
   }
-  
+
   static create(config: KeyValueConfig): KeyValue {
     if (!config.adapter) {
-      throw new Error('[KeyValue] Adapter is required - provide a key-value adapter instance');
+      throw new Error(
+        "[KeyValue] Adapter is required - provide a key-value adapter instance",
+      );
     }
-    
+
     const props: KeyValueProps = {
       dna: createUnitSchema({
         id: "kv",
         version: "1.0.0",
       }),
       adapter: config.adapter,
-      description: config.description || `KeyValue Unit with ${config.adapter.name} adapter`,
+      description:
+        config.description ||
+        `KeyValue Unit with ${config.adapter.name} adapter`,
       defaultTTL: config.defaultTTL,
-      namespace: config.namespace || '',
+      namespace: config.namespace || "",
       throwOnErrors: config.throwOnErrors ?? false,
+      emitEvents: config.emitEvents ?? false,
     };
-    
+
     return new KeyValue(props);
   }
 
-  
   /**
    * Get a value from storage
    */
   async get<T>(key: string): Promise<T | null> {
-    if (!key || typeof key !== 'string') {
+    if (!key || typeof key !== "string") {
       throw new Error(`[${this.dna.id}] Key must be a non-empty string`);
     }
-    
+
     const fullKey = this.buildKey(key);
-    
+
     try {
       const value = await this.props.adapter.get<T>(fullKey);
-      
+
       // Emit get event
-      this.events.emit({
-        type: 'get',
-        key: fullKey,
-        value,
-        timestamp: Date.now()
-      });
-      
+
+      if (this.props.emitEvents) {
+        this.events.emit({
+          type: "get",
+          key: fullKey,
+          value,
+          timestamp: Date.now(),
+        });
+      }
+
       return value;
     } catch (error) {
-      this.handleError('get', fullKey, error as Error);
-      throw new Error(`[${this.dna.id}] Failed to get key: ${error instanceof Error ? error.message : String(error)}`);
+      this.handleError("get", fullKey, error as Error);
+      throw new Error(
+        `[${this.dna.id}] Failed to get key: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -105,31 +141,34 @@ export class KeyValue extends Unit<KeyValueProps> {
    * Set a value in storage
    */
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
-    if (!key || typeof key !== 'string') {
+    if (!key || typeof key !== "string") {
       throw new Error(`[${this.dna.id}] Key must be a non-empty string`);
     }
-    
+
     if (value === undefined) {
       throw new Error(`[${this.dna.id}] Value cannot be undefined`);
     }
-    
+
     const fullKey = this.buildKey(key);
     const effectiveTTL = ttl ?? this.props.defaultTTL;
-    
+
     try {
       await this.props.adapter.set(fullKey, value, effectiveTTL);
-      
-      // Emit set event
-      this.events.emit({
-        type: 'set',
-        key: fullKey,
-        value,
-        ttl: effectiveTTL,
-        timestamp: Date.now()
-      });
+
+      if (this.props.emitEvents) {
+        this.events.emit({
+          type: "set",
+          key: fullKey,
+          value,
+          ttl: effectiveTTL,
+          timestamp: Date.now(),
+        });
+      }
     } catch (error) {
-      this.handleError('set', fullKey, error as Error);
-      throw new Error(`[${this.dna.id}] Failed to set key: ${error instanceof Error ? error.message : String(error)}`);
+      this.handleError("set", fullKey, error as Error);
+      throw new Error(
+        `[${this.dna.id}] Failed to set key: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -137,26 +176,29 @@ export class KeyValue extends Unit<KeyValueProps> {
    * Delete a key from storage
    */
   async delete(key: string): Promise<boolean> {
-    if (!key || typeof key !== 'string') {
+    if (!key || typeof key !== "string") {
       throw new Error(`[${this.dna.id}] Key must be a non-empty string`);
     }
-    
+
     const fullKey = this.buildKey(key);
-    
+
     try {
       const deleted = await this.props.adapter.delete(fullKey);
-      
-      // Emit delete event
-      this.events.emit({
-        type: 'delete',
-        key: fullKey,
-        timestamp: Date.now()
-      });
-      
+
+      if (this.props.emitEvents) {
+        this.events.emit({
+          type: "delete",
+          key: fullKey,
+          timestamp: Date.now(),
+        });
+      }
+
       return deleted;
     } catch (error) {
-      this.handleError('delete', fullKey, error as Error);
-      throw new Error(`[${this.dna.id}] Failed to delete key: ${error instanceof Error ? error.message : String(error)}`);
+      this.handleError("delete", fullKey, error as Error);
+      throw new Error(
+        `[${this.dna.id}] Failed to delete key: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -164,16 +206,18 @@ export class KeyValue extends Unit<KeyValueProps> {
    * Check if a key exists in storage
    */
   async exists(key: string): Promise<boolean> {
-    if (!key || typeof key !== 'string') {
+    if (!key || typeof key !== "string") {
       throw new Error(`[${this.dna.id}] Key must be a non-empty string`);
     }
-    
+
     const fullKey = this.buildKey(key);
-    
+
     try {
       return await this.props.adapter.exists(fullKey);
     } catch (error) {
-      throw new Error(`[${this.dna.id}] Failed to check key existence: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `[${this.dna.id}] Failed to check key existence: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -183,15 +227,18 @@ export class KeyValue extends Unit<KeyValueProps> {
   async clear(): Promise<void> {
     try {
       await this.props.adapter.clear();
-      
-      // Emit clear event
-      this.events.emit({
-        type: 'clear',
-        timestamp: Date.now()
-      });
+
+      if (this.props.emitEvents) {
+        this.events.emit({
+          type: "clear",
+          timestamp: Date.now(),
+        });
+      }
     } catch (error) {
-      this.handleError('clear', undefined, error as Error);
-      throw new Error(`[${this.dna.id}] Failed to clear storage: ${error instanceof Error ? error.message : String(error)}`);
+      this.handleError("clear", undefined, error as Error);
+      throw new Error(
+        `[${this.dna.id}] Failed to clear storage: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -202,18 +249,20 @@ export class KeyValue extends Unit<KeyValueProps> {
     if (!Array.isArray(keys)) {
       throw new Error(`[${this.dna.id}] Keys must be an array`);
     }
-    
-    const fullKeys = keys.map(key => {
-      if (!key || typeof key !== 'string') {
+
+    const fullKeys = keys.map((key) => {
+      if (!key || typeof key !== "string") {
         throw new Error(`[${this.dna.id}] All keys must be non-empty strings`);
       }
       return this.buildKey(key);
     });
-    
+
     try {
       return await this.props.adapter.mget<T>(fullKeys);
     } catch (error) {
-      throw new Error(`[${this.dna.id}] Failed to get multiple keys: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `[${this.dna.id}] Failed to get multiple keys: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -224,9 +273,9 @@ export class KeyValue extends Unit<KeyValueProps> {
     if (!Array.isArray(entries)) {
       throw new Error(`[${this.dna.id}] Entries must be an array`);
     }
-    
+
     const fullEntries: Array<[string, T]> = entries.map(([key, value]) => {
-      if (!key || typeof key !== 'string') {
+      if (!key || typeof key !== "string") {
         throw new Error(`[${this.dna.id}] All keys must be non-empty strings`);
       }
       if (value === undefined) {
@@ -234,13 +283,15 @@ export class KeyValue extends Unit<KeyValueProps> {
       }
       return [this.buildKey(key), value];
     });
-    
+
     const effectiveTTL = ttl ?? this.props.defaultTTL;
-    
+
     try {
       await this.props.adapter.mset(fullEntries, effectiveTTL);
     } catch (error) {
-      throw new Error(`[${this.dna.id}] Failed to set multiple keys: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `[${this.dna.id}] Failed to set multiple keys: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -251,18 +302,20 @@ export class KeyValue extends Unit<KeyValueProps> {
     if (!Array.isArray(keys)) {
       throw new Error(`[${this.dna.id}] Keys must be an array`);
     }
-    
-    const fullKeys = keys.map(key => {
-      if (!key || typeof key !== 'string') {
+
+    const fullKeys = keys.map((key) => {
+      if (!key || typeof key !== "string") {
         throw new Error(`[${this.dna.id}] All keys must be non-empty strings`);
       }
       return this.buildKey(key);
     });
-    
+
     try {
       return await this.props.adapter.deleteMany(fullKeys);
     } catch (error) {
-      throw new Error(`[${this.dna.id}] Failed to delete multiple keys: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `[${this.dna.id}] Failed to delete multiple keys: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -291,7 +344,10 @@ export class KeyValue extends Unit<KeyValueProps> {
    * Get adapter statistics if available
    */
   getStats(): KVStats | null {
-    if ('getStats' in this.props.adapter && typeof this.props.adapter.getStats === 'function') {
+    if (
+      "getStats" in this.props.adapter &&
+      typeof this.props.adapter.getStats === "function"
+    ) {
       return this.props.adapter.getStats() as KVStats;
     }
     return null;
@@ -299,22 +355,22 @@ export class KeyValue extends Unit<KeyValueProps> {
 
   /**
    * Subscribe to KV events
-   * 
+   *
    * Available events:
    * - 'set': When a key is set
-   * - 'get': When a key is retrieved  
+   * - 'get': When a key is retrieved
    * - 'delete': When a key is deleted
    * - 'clear': When storage is cleared
    * - 'error': When an error occurs
    * - 'expired': When a key expires (TTL)
-   * 
+   *
    * @param eventType - Type of event to listen for
    * @param handler - Function to call when event occurs
    * @returns Unsubscribe function
    */
   on(eventType: string, handler: (event: KVEvent) => void): () => void {
     this.events.on(eventType, handler);
-    
+
     // Return unsubscribe function
     return () => {
       this.events.off(eventType, handler);
@@ -323,7 +379,7 @@ export class KeyValue extends Unit<KeyValueProps> {
 
   /**
    * Unsubscribe from KV events
-   * 
+   *
    * @param eventType - Type of event to stop listening for
    * @param handler - Specific handler to remove (optional - removes all if not provided)
    */
@@ -342,7 +398,7 @@ export class KeyValue extends Unit<KeyValueProps> {
    * Subscribe to error events specifically (convenience method)
    */
   onError(handler: (error: KVError) => void): () => void {
-    return this.on('error', (event) => {
+    return this.on("error", (event) => {
       if (event.error) {
         handler({
           operation: event.type,
@@ -358,7 +414,10 @@ export class KeyValue extends Unit<KeyValueProps> {
    * Manual cleanup if adapter supports it
    */
   cleanup(): number {
-    if ('cleanup' in this.props.adapter && typeof this.props.adapter.cleanup === 'function') {
+    if (
+      "cleanup" in this.props.adapter &&
+      typeof this.props.adapter.cleanup === "function"
+    ) {
       return this.props.adapter.cleanup() as number;
     }
     return 0;
@@ -374,22 +433,26 @@ export class KeyValue extends Unit<KeyValueProps> {
   /**
    * Handle errors according to configuration
    */
-  private handleError(operation: string, key: string | undefined, error: Error): void {
+  private handleError(
+    operation: string,
+    key: string | undefined,
+    error: Error,
+  ): void {
     const kvError: KVError = {
       operation,
       key,
       error,
       timestamp: Date.now(),
     };
-    
+
     // Emit error event
     this.events.emit({
-      type: 'error',
+      type: "error",
       key,
       error,
       timestamp: kvError.timestamp,
     });
-    
+
     // Throw if configured to do so
     if (this.props.throwOnErrors) {
       throw error;
@@ -442,18 +505,24 @@ export class KeyValue extends Unit<KeyValueProps> {
         },
         // Event capabilities
         on: (...args: unknown[]) => {
-          const [eventType, handler] = args as [string, (event: KVEvent) => void];
+          const [eventType, handler] = args as [
+            string,
+            (event: KVEvent) => void,
+          ];
           return this.on(eventType, handler);
         },
         off: (...args: unknown[]) => {
-          const [eventType, handler] = args as [string, ((event: KVEvent) => void) | undefined];
+          const [eventType, handler] = args as [
+            string,
+            ((event: KVEvent) => void) | undefined,
+          ];
           return this.off(eventType, handler);
         },
         onError: (...args: unknown[]) => {
           const [handler] = args as [(error: KVError) => void];
           return this.onError(handler);
         },
-      }
+      },
     };
   }
 
@@ -478,8 +547,8 @@ CAPABILITIES:
 
 ADAPTER: ${this.props.adapter.name}
 CONFIG: ${JSON.stringify(this.props.adapter.config, null, 2)}
-NAMESPACE: ${this.props.namespace || 'none'}
-DEFAULT TTL: ${this.props.defaultTTL || 'none'}
+NAMESPACE: ${this.props.namespace || "none"}
+DEFAULT TTL: ${this.props.defaultTTL || "none"}
 
 EXAMPLE:
 const kv = KeyValue.create({ adapter: new MemoryAdapter() });
