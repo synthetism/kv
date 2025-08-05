@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MemoryAdapter } from '../src/adapters/memory-final.adapter.js';
+import { MemoryAdapter } from '../src/adapters/memory.adapter.js';
 
 describe('Enhanced Memory Adapter', () => {
   let adapter: MemoryAdapter;

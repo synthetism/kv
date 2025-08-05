@@ -1,6 +1,6 @@
 {
   "name": "@synet/kv",
-  "version": "0.0.1-dev.3",
+  "version": "1.0.0",
   "description": "Key-value storage with Unit Architecture",
   "type": "module",
   "main": "dist/index.js",
