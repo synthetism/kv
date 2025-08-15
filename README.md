@@ -13,7 +13,7 @@ version: 1.0.0
 ```
 **Professional key-value storage with Unit Architecture for Node.js and TypeScript**
 
-A modern, type-safe key-value storage abstraction that works seamlessly in development and production environments. Built with [Unit Architecture](https://github.com/synthetism/unit) principles for maximum flexibility and reliability.
+A modern, type-safe key-value storage abstraction that works seamlessly in development and production environments. 
 
 ##  Features
 
