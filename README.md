@@ -9,7 +9,7 @@
  |_|\_\___|\__, | \/ \__,_|_|\__,_|\___|  \____/|_| |_|_|\__|
             __/ |                                            
            |___/                                             
-version: 1.0.0
+version: 1.0.1
 ```
 **Professional key-value storage with Unit Architecture for Node.js and TypeScript**
 

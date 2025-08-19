@@ -84,6 +84,7 @@ export interface KeyValueProps extends UnitProps {
  * otherUnit.learn([contract]);
  * ```
  */
+export const VERSION = "1.0.0";
 export class KeyValue extends Unit<KeyValueProps> {
  
 
@@ -101,7 +102,7 @@ export class KeyValue extends Unit<KeyValueProps> {
     const props: KeyValueProps = {
       dna: createUnitSchema({
         id: "kv",
-        version: "1.0.0",
+        version: VERSION,
       }),
       adapter: config.adapter,
       description:

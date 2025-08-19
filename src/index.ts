@@ -20,7 +20,7 @@
  */
 
 // Core unit
-export { KeyValue } from "./kv.unit.js";
+export { KeyValue, VERSION } from "./kv.unit.js";
 export type { KeyValueConfig, KeyValueProps } from "./kv.unit.js";
 
 // Interfaces
