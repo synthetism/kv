@@ -1,6 +1,6 @@
 {
   "name": "@synet/kv",
-  "version": "1.0.1-dev.1",
+  "version": "1.0.1-dev.2",
   "description": "Key-value storage with Unit Architecture",
   "type": "module",
   "main": "dist/index.js",
@@ -53,7 +53,7 @@
   "homepage": "https://synthetism.ai",
   "license": "MIT",
   "dependencies": {
-    "@synet/state": "^0.0.1-dev.3",
-    "@synet/unit": "^1.0.7-dev.4"
+    "@synet/state": "^1.0.0",
+    "@synet/unit": "^1.1.0"
   }
 }

@@ -8,7 +8,7 @@
  * 3. Network-style units can now accept pre-configured state units
  */
 
-import { KeyValue } from '../src/kv.unit.js';
+import { KeyValue } from '../private/kv-old.unit.js';
 
 // Mock memory adapter for testing
 class MemoryAdapter {

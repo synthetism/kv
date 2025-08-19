@@ -1,3 +1,7 @@
+import type { 
+   Event,
+} from '@synet/unit';
+
 /**
  * Key-Value Storage Adapter Interface
  * Following @synet/queue adapter pattern
@@ -24,52 +28,36 @@ export interface IKeyValueAdapter {
   isHealthy(): Promise<boolean>;
 }
 
+type KVEventTypes = 
+'kv.set' | 
+'kv.update' | 
+'kv.get' | 
+'kv.delete' | 
+'kv.expired' | 
+'kv.clear' | 
+'kv.error';
+
 /**
  * KV Event types for conscious event-driven behavior
  */
-export interface KVEvent {
-  type: string;
-  key: string;
+export interface KVEvent extends Event {
+  type: KVEventTypes;
+  key?: string;
   value?: unknown;
   ttl?: number;
-  timestamp: number;
 }
 
-export interface KVSetEvent extends KVEvent {
-  type: "set" | "update";
-  value: unknown;
-  ttl?: number;
+export interface KVError extends KVEvent  {
+  operation: string;
 }
 
-export interface KVGetEvent extends KVEvent {
-  type: "get";
-  value: unknown;
-  hit: boolean;
+export interface KVStats {
+  hits: number;
+  misses: number;
+  sets: number;
+  deletes: number;
+  expired: number;
+  errors: number;
+  keys: number;
+  memory?: number;
 }
-
-export interface KVDeleteEvent extends KVEvent {
-  type: "delete";
-  existed: boolean;
-}
-
-export interface KVExpiredEvent extends KVEvent {
-  type: "expired";
-}
-
-export interface KVClearEvent extends KVEvent {
-  type: "clear";
-  count?: number;
-}
-
-export interface KVErrorEvent extends KVEvent {
-  type: "error";
-  error: string;
-}
-
-export type KVEvents =
-  | KVSetEvent
-  | KVGetEvent
-  | KVDeleteEvent
-  | KVExpiredEvent
-  | KVClearEvent
-  | KVErrorEvent;

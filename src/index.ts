@@ -24,7 +24,7 @@ export { KeyValue } from "./kv.unit.js";
 export type { KeyValueConfig, KeyValueProps } from "./kv.unit.js";
 
 // Interfaces
-export type { IKeyValueAdapter } from "./interfaces.js";
+export type { IKeyValueAdapter } from "./types.js";
 
 // Adapters
 export { MemoryAdapter } from "./adapters/memory.adapter.js";

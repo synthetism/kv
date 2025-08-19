@@ -1,16 +1,24 @@
-import {
-  Unit,
-  type UnitProps,
+import { 
+  Unit, 
+  EventEmitter,
+  createUnitSchema, 
+  Capabilities,
+  Schema,
+  Validator,
+  type UnitProps, 
   type TeachingContract,
-  createUnitSchema,
-} from "@synet/unit";
-import type { IKeyValueAdapter } from "./interfaces.js";
-import {
-  KVEventEmitter,
-  type KVEvent,
-  type KVError,
-  type KVStats,
-} from "./events.js";
+  type UnitCore,
+  type Event,
+  type IEventEmitter,
+
+} from '@synet/unit';
+
+import type { IKeyValueAdapter } from "./types.js";
+import type {
+  KVEvent,
+  KVError,
+  KVStats,
+} from "./types.js";
 import { StateAsync, type StorageBinding } from "@synet/state";
 
 /**
@@ -30,6 +38,9 @@ export interface KeyValueConfig {
 
   /** Whether to emit events for operations */
   emitEvents?: boolean;
+
+  /** Event emitter instance  */
+  eventEmitter?: IEventEmitter<KVEvent>;
 }
 
 /**
@@ -74,7 +85,7 @@ export interface KeyValueProps extends UnitProps {
  * ```
  */
 export class KeyValue extends Unit<KeyValueProps> {
-  private events = new KVEventEmitter();
+ 
 
   protected constructor(props: KeyValueProps) {
     super(props);
@@ -100,11 +111,174 @@ export class KeyValue extends Unit<KeyValueProps> {
       namespace: config.namespace || "",
       throwOnErrors: config.throwOnErrors ?? false,
       emitEvents: config.emitEvents ?? false,
+      eventEmitter: config.eventEmitter,
     };
 
     return new KeyValue(props);
   }
 
+   protected build(): UnitCore {
+      const capabilities = Capabilities.create(this.dna.id, {
+        get: async (...args: unknown[]) => {
+          const [key] = args as [string];
+          return this.get(key);
+        },
+        set: async (...args: unknown[]) => {
+          const [key, value, ttl] = args as [string, unknown, number?];
+          return this.set(key, value, ttl);
+        },
+        delete: async (...args: unknown[]) => {
+          const [key] = args as [string];
+          return this.delete(key);
+        },
+        exists: async (...args: unknown[]) => {
+          const [key] = args as [string];
+          return this.exists(key);
+        },
+        clear: async (...args: unknown[]) => {
+          return this.clear();
+        },
+        mget: async (...args: unknown[]) => {
+          const [keys] = args as [string[]];
+          return this.mget(keys);
+        },
+        mset: async (...args: unknown[]) => {
+          const [entries, ttl] = args as [Array<[string, unknown]>, number?];
+          return this.mset(entries, ttl);
+        },
+        deleteMany: async (...args: unknown[]) => {
+          const [keys] = args as [string[]];
+          return this.deleteMany(keys);
+        },
+        isHealthy: async (...args: unknown[]) => {
+          return this.isHealthy();
+        },     
+      });
+
+      const schema = Schema.create(this.dna.id, {
+        get: {
+          name: 'get',
+          description: 'Get value by key from storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to retrieve' }
+            },
+            required: ['key']
+          }
+        },
+        set: {
+          name: 'set',
+          description: 'Set key-value pair with optional TTL',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to store' },
+              value: { type: 'object', description: 'Value to store (any type)' },
+              ttl: { type: 'number', description: 'Time to live in milliseconds (optional)' }
+            },
+            required: ['key', 'value']
+          }
+        },
+        delete: {
+          name: 'delete',
+          description: 'Delete key from storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to delete' }
+            },
+            required: ['key']
+          }
+        },
+        exists: {
+          name: 'exists',
+          description: 'Check if key exists in storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', description: 'Key to check' }
+            },
+            required: ['key']
+          }
+        },
+        clear: {
+          name: 'clear',
+          description: 'Clear all keys from storage',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        },
+        mget: {
+          name: 'mget',
+          description: 'Get multiple values by keys',
+          parameters: {
+            type: 'object',
+            properties: {
+              keys: { 
+                type: 'array', 
+                description: 'Array of keys to retrieve' 
+              }
+            },
+            required: ['keys']
+          }
+        },
+        mset: {
+          name: 'mset',
+          description: 'Set multiple key-value pairs',
+          parameters: {
+            type: 'object',
+            properties: {
+              entries: { 
+                type: 'array', 
+                description: 'Array of [key, value] pairs' 
+              },
+              ttl: { type: 'number', description: 'Time to live in milliseconds (optional)' }
+            },
+            required: ['entries']
+          }
+        },
+        deleteMany: {
+          name: 'deleteMany',
+          description: 'Delete multiple keys from storage',
+          parameters: {
+            type: 'object',
+            properties: {
+              keys: { 
+                type: 'array', 
+                description: 'Array of keys to delete' 
+              }
+            },
+            required: ['keys']
+          }
+        },
+        isHealthy: {
+          name: 'isHealthy',
+          description: 'Check if storage is healthy and connected',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }
+      });
+      const validator = Validator.create({
+        unitId: this.dna.id,
+        capabilities,
+        schema,
+        strictMode: false
+      });
+  
+      return { capabilities, schema, validator };
+    }
+
+      // Consciousness Trinity Access
+  capabilities(): Capabilities { return this._unit.capabilities; }
+  schema(): Schema { return this._unit.schema; }
+  validator(): Validator { return this._unit.validator; }
+  
   /**
    * Get a value from storage
    */
@@ -121,12 +295,12 @@ export class KeyValue extends Unit<KeyValueProps> {
       // Emit get event
 
       if (this.props.emitEvents) {
-        this.events.emit({
-          type: "get",
+        this.emit({
+          type: "kv.get",
           key: fullKey,
           value,
-          timestamp: Date.now(),
-        });
+          timestamp: new Date(),
+        } as KVEvent);
       }
 
       return value;
@@ -157,13 +331,13 @@ export class KeyValue extends Unit<KeyValueProps> {
       await this.props.adapter.set(fullKey, value, effectiveTTL);
 
       if (this.props.emitEvents) {
-        this.events.emit({
-          type: "set",
+        this.emit({
+          type: "kv.set",
           key: fullKey,
           value,
           ttl: effectiveTTL,
-          timestamp: Date.now(),
-        });
+          timestamp: new Date(),
+        } as KVEvent);
       }
     } catch (error) {
       this.handleError("set", fullKey, error as Error);
@@ -187,11 +361,11 @@ export class KeyValue extends Unit<KeyValueProps> {
       const deleted = await this.props.adapter.delete(fullKey);
 
       if (this.props.emitEvents) {
-        this.events.emit({
-          type: "delete",
+        this.emit({
+          type: "kv.delete",
           key: fullKey,
-          timestamp: Date.now(),
-        });
+          timestamp: new Date(),
+        } as KVEvent);
       }
 
       return deleted;
@@ -230,9 +404,9 @@ export class KeyValue extends Unit<KeyValueProps> {
       await this.props.adapter.clear();
 
       if (this.props.emitEvents) {
-        this.events.emit({
-          type: "clear",
-          timestamp: Date.now(),
+        this.emit({
+          type: "kv.clear",
+          timestamp: new Date(),
         });
       }
     } catch (error) {
@@ -369,24 +543,9 @@ export class KeyValue extends Unit<KeyValueProps> {
    * @param handler - Function to call when event occurs
    * @returns Unsubscribe function
    */
-  on(eventType: string, handler: (event: KVEvent) => void): () => void {
-    this.events.on(eventType, handler);
 
-    // Return unsubscribe function
-    return () => {
-      this.events.off(eventType, handler);
-    };
-  }
 
-  /**
-   * Unsubscribe from KV events
-   *
-   * @param eventType - Type of event to stop listening for
-   * @param handler - Specific handler to remove (optional - removes all if not provided)
-   */
-  off(eventType: string, handler?: (event: KVEvent) => void): void {
-    this.events.off(eventType, handler);
-  }
+  
 
   /**
    * Subscribe to events using legacy observer pattern
@@ -395,21 +554,6 @@ export class KeyValue extends Unit<KeyValueProps> {
     return this.on(eventType, handler);
   }
 
-  /**
-   * Subscribe to error events specifically (convenience method)
-   */
-  onError(handler: (error: KVError) => void): () => void {
-    return this.on("error", (event) => {
-      if (event.error) {
-        handler({
-          operation: event.type,
-          key: event.key,
-          error: event.error,
-          timestamp: event.timestamp,
-        });
-      }
-    });
-  }
 
   /**
    * Manual cleanup if adapter supports it
@@ -478,19 +622,15 @@ export class KeyValue extends Unit<KeyValueProps> {
     error: Error,
   ): void {
     const kvError: KVError = {
+      type: "kv.error",
       operation,
       key,
       error,
-      timestamp: Date.now(),
+      timestamp: new Date(),
     };
 
     // Emit error event
-    this.events.emit({
-      type: "error",
-      key,
-      error,
-      timestamp: kvError.timestamp,
-    });
+    this.emit(kvError);
 
     // Throw if configured to do so
     if (this.props.throwOnErrors) {
@@ -501,176 +641,13 @@ export class KeyValue extends Unit<KeyValueProps> {
   /**
    * Teach storage capabilities to other units
    */
+ 
   teach(): TeachingContract {
     return {
       unitId: this.dna.id,
-      capabilities: {
-        get: async (...args: unknown[]) => {
-          const [key] = args as [string];
-          return this.get(key);
-        },
-        set: async (...args: unknown[]) => {
-          const [key, value, ttl] = args as [string, unknown, number?];
-          return this.set(key, value, ttl);
-        },
-        delete: async (...args: unknown[]) => {
-          const [key] = args as [string];
-          return this.delete(key);
-        },
-        exists: async (...args: unknown[]) => {
-          const [key] = args as [string];
-          return this.exists(key);
-        },
-        clear: async (...args: unknown[]) => {
-          return this.clear();
-        },
-        mget: async (...args: unknown[]) => {
-          const [keys] = args as [string[]];
-          return this.mget(keys);
-        },
-        mset: async (...args: unknown[]) => {
-          const [entries, ttl] = args as [Array<[string, unknown]>, number?];
-          return this.mset(entries, ttl);
-        },
-        deleteMany: async (...args: unknown[]) => {
-          const [keys] = args as [string[]];
-          return this.deleteMany(keys);
-        },
-        isHealthy: async (...args: unknown[]) => {
-          return this.isHealthy();
-        },
-        getAdapter: (...args: unknown[]) => {
-          return this.getAdapter();
-        },
-        // Event capabilities
-        on: (...args: unknown[]) => {
-          const [eventType, handler] = args as [
-            string,
-            (event: KVEvent) => void,
-          ];
-          return this.on(eventType, handler);
-        },
-        off: (...args: unknown[]) => {
-          const [eventType, handler] = args as [
-            string,
-            ((event: KVEvent) => void) | undefined,
-          ];
-          return this.off(eventType, handler);
-        },
-        onError: (...args: unknown[]) => {
-          const [handler] = args as [(error: KVError) => void];
-          return this.onError(handler);
-        },
-      },
-      schema: {
-        get: {
-          name: 'get',
-          description: 'Get value by key from storage',
-          parameters: {
-            type: 'object',
-            properties: {
-              key: { type: 'string', description: 'Key to retrieve' }
-            },
-            required: ['key']
-          }
-        },
-        set: {
-          name: 'set',
-          description: 'Set key-value pair with optional TTL',
-          parameters: {
-            type: 'object',
-            properties: {
-              key: { type: 'string', description: 'Key to store' },
-              value: { type: 'object', description: 'Value to store (any type)' },
-              ttl: { type: 'number', description: 'Time to live in milliseconds (optional)' }
-            },
-            required: ['key', 'value']
-          }
-        },
-        delete: {
-          name: 'delete',
-          description: 'Delete key from storage',
-          parameters: {
-            type: 'object',
-            properties: {
-              key: { type: 'string', description: 'Key to delete' }
-            },
-            required: ['key']
-          }
-        },
-        exists: {
-          name: 'exists',
-          description: 'Check if key exists in storage',
-          parameters: {
-            type: 'object',
-            properties: {
-              key: { type: 'string', description: 'Key to check' }
-            },
-            required: ['key']
-          }
-        },
-        clear: {
-          name: 'clear',
-          description: 'Clear all keys from storage',
-          parameters: {
-            type: 'object',
-            properties: {},
-            required: []
-          }
-        },
-        mget: {
-          name: 'mget',
-          description: 'Get multiple values by keys',
-          parameters: {
-            type: 'object',
-            properties: {
-              keys: { 
-                type: 'array', 
-                description: 'Array of keys to retrieve' 
-              }
-            },
-            required: ['keys']
-          }
-        },
-        mset: {
-          name: 'mset',
-          description: 'Set multiple key-value pairs',
-          parameters: {
-            type: 'object',
-            properties: {
-              entries: { 
-                type: 'array', 
-                description: 'Array of [key, value] pairs' 
-              },
-              ttl: { type: 'number', description: 'Time to live in milliseconds (optional)' }
-            },
-            required: ['entries']
-          }
-        },
-        deleteMany: {
-          name: 'deleteMany',
-          description: 'Delete multiple keys from storage',
-          parameters: {
-            type: 'object',
-            properties: {
-              keys: { 
-                type: 'array', 
-                description: 'Array of keys to delete' 
-              }
-            },
-            required: ['keys']
-          }
-        },
-        isHealthy: {
-          name: 'isHealthy',
-          description: 'Check if storage is healthy and connected',
-          parameters: {
-            type: 'object',
-            properties: {},
-            required: []
-          }
-        }
-      }
+      capabilities: this._unit.capabilities,
+      schema: this._unit.schema,
+      validator: this._unit.validator
     };
   }
 

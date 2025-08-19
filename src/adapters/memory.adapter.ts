@@ -1,4 +1,4 @@
-import type { IKeyValueAdapter } from "../interfaces.js";
+import type { IKeyValueAdapter } from "../types.js";
 import {
   defaultSerialize,
   defaultDeserialize,
