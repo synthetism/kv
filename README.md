@@ -438,6 +438,3 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 - [`@synet/unit`](https://github.com/synthetism/unit) - Core Unit Architecture framework
 - [`@synet/patterns`](https://github.com/synthetism/patterns) - Common patterns for Unit Architecture
 
----
-
-**Made with ❤️ by the SYNET Team**
